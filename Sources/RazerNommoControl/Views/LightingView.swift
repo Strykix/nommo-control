@@ -41,11 +41,24 @@ struct LightingView: View {
                 .font(.caption)
                 .foregroundStyle(.secondary)
 
+            if let channel = razerChannel {
+                Text("Canal : \(channel.uuidString)")
+                    .font(.system(.caption, design: .monospaced))
+                    .foregroundStyle(.secondary)
+            } else {
+                Label(
+                    "Canal Razer introuvable. Connectez le Nommo : cette section écrit toujours sur 416D0000, indépendamment du sélecteur ci-dessus.",
+                    systemImage: "exclamationmark.triangle"
+                )
+                .font(.caption)
+                .foregroundStyle(.orange)
+            }
+
             HStack(spacing: 12) {
                 Button("Sonder les opcodes") { probeOpcodes() }
                 Button("Lire la luminosité") { sendGet(NommoBLE.brightnessOpcode) }
             }
-            .disabled(targetNode == nil)
+            .disabled(razerChannel == nil)
 
             HStack(spacing: 12) {
                 Text("Luminosité").font(.callout)
@@ -54,7 +67,7 @@ struct LightingView: View {
                     .font(.system(.callout, design: .monospaced))
                     .frame(width: 36, alignment: .trailing)
                 Button("Appliquer") { sendNommoBrightness() }
-                    .disabled(targetNode == nil)
+                    .disabled(razerChannel == nil)
             }
 
             Picker("Disposition d'écriture", selection: $lighting.setLayout) {
@@ -196,24 +209,35 @@ struct LightingView: View {
         return bluetooth.writableCharacteristics.first { $0.id == id }
     }
 
+    /// The compact protocol is meaningful only on Razer's own characteristic, so this
+    /// section resolves it directly instead of following the generic target picker,
+    /// which may still hold a characteristic chosen during earlier exploration.
+    private var razerChannel: CharacteristicNode? {
+        bluetooth.writableCharacteristics.first { $0.isRazerCommandChannel }
+    }
+
     private func probeOpcodes() {
-        guard let node = targetNode else { return }
+        guard let node = razerChannel else { return reportMissingChannel() }
         bluetooth.probeOpcodes(on: node)
     }
 
     private func sendGet(_ opcode: UInt8) {
-        guard let node = targetNode else { return }
+        guard let node = razerChannel else { return reportMissingChannel() }
         bluetooth.write(NommoBLE.get(opcode), to: node, withResponse: false, fragment: false)
     }
 
     private func sendNommoBrightness() {
-        guard let node = targetNode else { return }
+        guard let node = razerChannel else { return reportMissingChannel() }
         let payload = NommoBLE.set(
             NommoBLE.brightnessOpcode,
             value: [UInt8(clamping: Int(lighting.bleBrightness))],
             layout: lighting.setLayout
         )
         bluetooth.write(payload, to: node, withResponse: false, fragment: false)
+    }
+
+    private func reportMissingChannel() {
+        bluetooth.append(.error, "Canal Razer (416D0000) absent — appareil déconnecté ?")
     }
 
     /// Only fills an empty selection, so a deliberate choice of another channel survives.
@@ -226,7 +250,10 @@ struct LightingView: View {
     }
 
     private func sendEffect() {
-        guard let node = targetNode else { return }
+        guard let node = targetNode else {
+            bluetooth.append(.error, "Aucune caractéristique cible sélectionnée")
+            return
+        }
         guard let payload = lighting.effectPayload() else {
             bluetooth.append(.error, "Modèle hexadécimal invalide")
             return
@@ -240,7 +267,14 @@ struct LightingView: View {
     }
 
     private func sendBrightness() {
-        guard let node = targetNode, let payload = lighting.brightnessPayload() else { return }
+        guard let node = targetNode else {
+            bluetooth.append(.error, "Aucune caractéristique cible sélectionnée")
+            return
+        }
+        guard let payload = lighting.brightnessPayload() else {
+            bluetooth.append(.error, "La luminosité n'existe que pour l'encodage Rapport Razer")
+            return
+        }
         bluetooth.write(
             payload,
             to: node,
