@@ -109,6 +109,8 @@ struct LightingView: View {
                 TextField("FF 00 00 00", text: $lighting.workbenchValue)
                     .font(.system(.body, design: .monospaced))
                 Button("Écrire") { writeWorkbenchOpcode() }
+                Button("Balayer les positions") { sweepWorkbenchPositions() }
+                    .disabled(workbenchCurrentValue == nil)
             }
 
             if let warning = workbenchWarning {
@@ -315,6 +317,35 @@ struct LightingView: View {
             withResponse: false,
             fragment: false
         )
+    }
+
+    /// Drives one byte of the value to 0xFF at a time, three seconds apart, then puts
+    /// the original value back. Watching the speaker through this says which position
+    /// carries colour — the one thing a notification cannot reveal.
+    private func sweepWorkbenchPositions() {
+        guard let node = razerChannel else { return reportMissingChannel() }
+        guard let opcode = workbenchOpcode else {
+            bluetooth.append(.error, "Opcode illisible : deux chiffres hexadécimaux attendus")
+            return
+        }
+        guard let original = workbenchCurrentValue, !original.isEmpty else {
+            bluetooth.append(.error, "Lisez d'abord l'opcode pour connaître la longueur attendue")
+            return
+        }
+
+        var steps = (0..<original.count).map { position -> (label: String, data: Data) in
+            var value = [UInt8](repeating: 0, count: original.count)
+            value[position] = 0xFF
+            return (
+                label: "octet \(position) à FF",
+                data: NommoBLE.set(opcode, value: value, layout: lighting.setLayout)
+            )
+        }
+        steps.append((
+            label: "restauration de la valeur lue",
+            data: NommoBLE.set(opcode, value: original, layout: lighting.setLayout)
+        ))
+        bluetooth.writeSequence(steps, to: node)
     }
 
     private func reportMissingChannel() {

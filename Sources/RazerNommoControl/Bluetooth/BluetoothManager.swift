@@ -148,6 +148,27 @@ final class BluetoothManager: NSObject, ObservableObject {
         }
     }
 
+    /// Writes payloads one at a time with a pause between them, so a human can watch
+    /// the speaker and say which one produced a visible change. Each step is announced
+    /// before it is sent, which is what makes the log correlate with what the eye sees.
+    func writeSequence(
+        _ payloads: [(label: String, data: Data)],
+        to node: CharacteristicNode,
+        gap: TimeInterval = 3
+    ) {
+        guard connectedPeripheral != nil else {
+            append(.error, "Aucun appareil connecté")
+            return
+        }
+        for (index, entry) in payloads.enumerated() {
+            DispatchQueue.main.asyncAfter(deadline: .now() + Double(index) * gap) { [weak self] in
+                guard let self else { return }
+                self.append(.info, "Essai \(index + 1)/\(payloads.count) — \(entry.label)")
+                self.write(entry.data, to: node, withResponse: false, fragment: false)
+            }
+        }
+    }
+
     func read(_ node: CharacteristicNode) {
         guard let peripheral = connectedPeripheral else { return }
         peripheral.readValue(for: node.characteristic)
