@@ -54,7 +54,13 @@ final class LightingController: ObservableObject {
     @Published var targetCharacteristicID: String?
 
     @Published var bleBrightness: Double = 255
-    @Published var setLayout: NommoBLE.SetLayout = .padded
+    /// Confirmed on hardware: commands share the replies' [opcode][type][len][value]
+    /// shape. Sending the value straight after the opcode makes the firmware read it
+    /// as a type byte and apply an empty value instead.
+    @Published var setLayout: NommoBLE.SetLayout = .tagged
+
+    @Published var workbenchOpcode = "10"
+    @Published var workbenchValue = ""
 
     /// Placeholders are substituted before the string is parsed as hex.
     @Published var template = "0F 02 01 05 06 00 00 01 {R} {G} {B}"

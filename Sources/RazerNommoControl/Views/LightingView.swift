@@ -12,6 +12,8 @@ struct LightingView: View {
                 Divider()
                 nommoSection
                 Divider()
+                workbenchSection
+                Divider()
                 encodingSection
                 Divider()
                 effectSection
@@ -77,6 +79,43 @@ struct LightingView: View {
             }
             .pickerStyle(.radioGroup)
         }
+    }
+
+    private var workbenchSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("Établi à opcodes").font(.headline)
+            Text("La méthode pour trouver la couleur : lire un opcode pour connaître la longueur exacte de sa valeur, puis la réécrire modifiée. Une écriture de longueur différente est ignorée sans réponse. L'opcode 10 est le principal suspect.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+
+            HStack(spacing: 8) {
+                Text("Opcode").font(.callout)
+                TextField("10", text: $lighting.workbenchOpcode)
+                    .font(.system(.body, design: .monospaced))
+                    .frame(width: 56)
+                Button("Lire") { readWorkbenchOpcode() }
+
+                if let value = workbenchCurrentValue {
+                    Text("lu : \(Hex.encode(Data(value))) (\(value.count) o)")
+                        .font(.system(.caption, design: .monospaced))
+                        .foregroundStyle(.secondary)
+                    Button("Reprendre") { lighting.workbenchValue = Hex.encode(Data(value)) }
+                }
+                Spacer()
+            }
+
+            HStack(spacing: 8) {
+                Text("Valeur").font(.callout)
+                TextField("FF 00 00 00", text: $lighting.workbenchValue)
+                    .font(.system(.body, design: .monospaced))
+                Button("Écrire") { writeWorkbenchOpcode() }
+            }
+
+            if let warning = workbenchWarning {
+                Text(warning).font(.caption).foregroundStyle(.orange)
+            }
+        }
+        .disabled(razerChannel == nil)
     }
 
     private var targetSection: some View {
@@ -234,6 +273,48 @@ struct LightingView: View {
             layout: lighting.setLayout
         )
         bluetooth.write(payload, to: node, withResponse: false, fragment: false)
+    }
+
+    private var workbenchOpcode: UInt8? {
+        UInt8(lighting.workbenchOpcode.trimmingCharacters(in: .whitespaces), radix: 16)
+    }
+
+    private var workbenchCurrentValue: [UInt8]? {
+        workbenchOpcode.flatMap { bluetooth.opcodeValues[$0] }
+    }
+
+    private var workbenchWarning: String? {
+        guard let expected = workbenchCurrentValue,
+              let typed = Hex.decode(lighting.workbenchValue),
+              typed.count != expected.count
+        else { return nil }
+        return "Valeur de \(typed.count) o alors que l'opcode en annonce \(expected.count) : le firmware ignorera l'écriture."
+    }
+
+    private func readWorkbenchOpcode() {
+        guard let opcode = workbenchOpcode else {
+            bluetooth.append(.error, "Opcode illisible : deux chiffres hexadécimaux attendus")
+            return
+        }
+        sendGet(opcode)
+    }
+
+    private func writeWorkbenchOpcode() {
+        guard let node = razerChannel else { return reportMissingChannel() }
+        guard let opcode = workbenchOpcode else {
+            bluetooth.append(.error, "Opcode illisible : deux chiffres hexadécimaux attendus")
+            return
+        }
+        guard let value = Hex.decode(lighting.workbenchValue) else {
+            bluetooth.append(.error, "Valeur hexadécimale invalide")
+            return
+        }
+        bluetooth.write(
+            NommoBLE.set(opcode, value: [UInt8](value), layout: lighting.setLayout),
+            to: node,
+            withResponse: false,
+            fragment: false
+        )
     }
 
     private func reportMissingChannel() {

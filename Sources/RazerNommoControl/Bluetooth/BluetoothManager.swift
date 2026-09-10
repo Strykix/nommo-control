@@ -12,6 +12,8 @@ final class BluetoothManager: NSObject, ObservableObject {
     @Published private(set) var connectedPeripheral: CBPeripheral?
     @Published private(set) var isScanning = false
     @Published private(set) var log: [LogEntry] = []
+    /// Last value reported for each Nommo opcode, keyed by opcode.
+    @Published private(set) var opcodeValues: [UInt8: [UInt8]] = [:]
     @Published var onlyRazerDevices = true
 
     private var central: CBCentralManager!
@@ -65,6 +67,18 @@ final class BluetoothManager: NSObject, ObservableObject {
 
     func connect(_ device: DiscoveredDevice) {
         stopScan()
+        // Reconnecting to the device already in hand tears down a working link and
+        // pays for another service discovery, so a repeated tap must be a no-op.
+        switch device.peripheral.state {
+        case .connected:
+            append(.info, "Déjà connecté à \(device.name)")
+            return
+        case .connecting:
+            append(.info, "Connexion à \(device.name) déjà en cours…")
+            return
+        default:
+            break
+        }
         disconnect()
         append(.info, "Connexion à \(device.name)…")
         central.connect(device.peripheral, options: nil)
@@ -325,6 +339,9 @@ extension BluetoothManager: CBPeripheralDelegate {
         if characteristic.uuid.uuidString.uppercased().contains(CharacteristicNode.razerSignature),
            let reply = NommoBLE.parse(value) {
             append(.rx, "   \(reply.description)")
+            // Remembered so a write can reuse the exact length the firmware expects:
+            // a SET whose length differs is dropped without any reply at all.
+            opcodeValues[reply.opcode] = reply.value
         }
     }
 
