@@ -259,12 +259,25 @@ extension BluetoothManager: CBPeripheralDelegate {
             return
         }
         guard let index = services.firstIndex(where: { $0.service === service }) else { return }
-        services[index].characteristics = (service.characteristics ?? []).map { characteristic in
+        let nodes = (service.characteristics ?? []).map { characteristic in
             CharacteristicNode(
                 id: "\(service.uuid.uuidString)/\(characteristic.uuid.uuidString)",
                 characteristic: characteristic,
                 lastValue: characteristic.value
             )
+        }
+        services[index].characteristics = nodes
+
+        append(.info, "Service \(short(service.uuid))")
+        for node in nodes {
+            append(.info, "   \(short(node.characteristic.uuid)) [\(node.propertyLabels.joined(separator: " "))]")
+            // Razer answers every command with a status frame. Without this subscription
+            // the reply never surfaces, and an accepted frame looks exactly like a
+            // rejected one.
+            if node.characteristic.properties.contains(.notify)
+                || node.characteristic.properties.contains(.indicate) {
+                peripheral.setNotifyValue(true, for: node.characteristic)
+            }
         }
     }
 
