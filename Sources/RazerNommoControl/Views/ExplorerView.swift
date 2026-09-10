@@ -1,9 +1,16 @@
 import SwiftUI
 
+/// Holds what would normally be `@State`. In recent SDKs `@State` expands through the
+/// SwiftUIMacros plugin, which ships with Xcode but not with the Command Line Tools, so
+/// an ObservableObject keeps the app buildable with either toolchain.
+private final class ExplorerSelection: ObservableObject {
+    @Published var manualPayload = ""
+    @Published var selectedID: String?
+}
+
 struct ExplorerView: View {
     @EnvironmentObject private var bluetooth: BluetoothManager
-    @State private var manualPayload = ""
-    @State private var selectedID: String?
+    @StateObject private var selection = ExplorerSelection()
 
     var body: some View {
         HSplitView {
@@ -19,9 +26,9 @@ struct ExplorerView: View {
             ForEach(bluetooth.services) { service in
                 Section(service.id) {
                     ForEach(service.characteristics) { node in
-                        CharacteristicRow(node: node, isSelected: node.id == selectedID)
+                        CharacteristicRow(node: node, isSelected: node.id == selection.selectedID)
                             .contentShape(Rectangle())
-                            .onTapGesture { selectedID = node.id }
+                            .onTapGesture { selection.selectedID = node.id }
                     }
                 }
             }
@@ -47,7 +54,7 @@ struct ExplorerView: View {
                     .font(.caption2)
                     .foregroundStyle(.secondary)
 
-                TextField("Octets hexadécimaux, ex. 00 3F 00 00", text: $manualPayload, axis: .vertical)
+                TextField("Octets hexadécimaux, ex. 00 3F 00 00", text: $selection.manualPayload, axis: .vertical)
                     .font(.system(.body, design: .monospaced))
                     .lineLimit(3...8)
 
@@ -90,11 +97,11 @@ struct ExplorerView: View {
     }
 
     private var selectedNode: CharacteristicNode? {
-        bluetooth.services.flatMap(\.characteristics).first { $0.id == selectedID }
+        bluetooth.services.flatMap(\.characteristics).first { $0.id == selection.selectedID }
     }
 
     private var parsed: Data? {
-        Hex.decode(manualPayload)
+        Hex.decode(selection.manualPayload)
     }
 
     private func write(withResponse: Bool) {

@@ -25,6 +25,12 @@ L'app permet de trancher empiriquement laquelle de ces situations est la vôtre.
 
 Nécessite macOS 13+ et les outils en ligne de commande Xcode.
 
+Le code évite volontairement `@State` : dans les SDK récents c'est une macro dont le plugin
+(`SwiftUIMacros`) est livré avec Xcode complet mais absent des Command Line Tools, ce qui
+casse la compilation avec ces derniers seuls. Si une future modification en réintroduit une,
+installez Xcode et pointez la toolchain dessus avec
+`sudo xcode-select -s /Applications/Xcode.app`.
+
 ```bash
 ./scripts/build-app.sh
 open ".build/Nommo Control.app"
