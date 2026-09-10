@@ -45,12 +45,15 @@ struct LightingView: View {
                 Picker("Cible", selection: $lighting.targetCharacteristicID) {
                     Text("— choisir —").tag(String?.none)
                     ForEach(writable) { node in
-                        Text("\(node.uuidString) [\(node.propertyLabels.joined(separator: ", "))]")
+                        Text("\(node.uuidString) [\(node.propertyLabels.joined(separator: ", "))]"
+                            + (node.isRazerCommandChannel ? "  ★ canal Razer" : ""))
                             .tag(String?.some(node.id))
                     }
                 }
                 .labelsHidden()
                 .onChange(of: lighting.targetCharacteristicID) { _ in lighting.persist() }
+                .onAppear { preferRazerChannel() }
+                .onChange(of: writable.map(\.id)) { _ in preferRazerChannel() }
             }
 
             HStack(spacing: 16) {
@@ -157,6 +160,15 @@ struct LightingView: View {
     private var targetNode: CharacteristicNode? {
         guard let id = lighting.targetCharacteristicID else { return nil }
         return bluetooth.writableCharacteristics.first { $0.id == id }
+    }
+
+    /// Only fills an empty selection, so a deliberate choice of another channel survives.
+    private func preferRazerChannel() {
+        guard lighting.targetCharacteristicID == nil,
+              let razer = bluetooth.writableCharacteristics.first(where: { $0.isRazerCommandChannel })
+        else { return }
+        lighting.targetCharacteristicID = razer.id
+        lighting.persist()
     }
 
     private func sendEffect() {

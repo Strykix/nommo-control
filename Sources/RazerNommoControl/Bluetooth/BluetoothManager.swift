@@ -82,14 +82,19 @@ final class BluetoothManager: NSObject, ObservableObject {
             append(.error, "Aucun appareil connecté")
             return
         }
-        let type: CBCharacteristicWriteType = withResponse ? .withResponse : .withoutResponse
-        if type == .withResponse, !node.characteristic.properties.contains(.write) {
-            append(.error, "\(node.uuidString) n'accepte pas l'écriture avec réponse")
+        let supportsWithResponse = node.characteristic.properties.contains(.write)
+        let supportsWithoutResponse = node.characteristic.properties.contains(.writeWithoutResponse)
+        guard supportsWithResponse || supportsWithoutResponse else {
+            append(.error, "\(node.uuidString) n'accepte aucune écriture")
             return
         }
-        if type == .withoutResponse, !node.characteristic.properties.contains(.writeWithoutResponse) {
-            append(.error, "\(node.uuidString) n'accepte pas l'écriture sans réponse")
-            return
+        // Fall back to whichever write type the characteristic actually offers: Razer's
+        // BLE command channel is write-without-response only, and refusing the write
+        // there would close the one command path the speaker exposes.
+        let useResponse = withResponse ? supportsWithResponse : !supportsWithoutResponse
+        let type: CBCharacteristicWriteType = useResponse ? .withResponse : .withoutResponse
+        if useResponse != withResponse {
+            append(.info, "\(short(node.characteristic.uuid)) : bascule en écriture \(useResponse ? "avec" : "sans") réponse")
         }
 
         // A 90-byte Razer frame does not fit in a default ATT MTU, so split it unless
@@ -270,7 +275,8 @@ extension BluetoothManager: CBPeripheralDelegate {
 
         append(.info, "Service \(short(service.uuid))")
         for node in nodes {
-            append(.info, "   \(short(node.characteristic.uuid)) [\(node.propertyLabels.joined(separator: " "))]")
+            let marker = node.isRazerCommandChannel ? "  <<< canal Razer" : ""
+            append(.info, "   \(short(node.characteristic.uuid)) [\(node.propertyLabels.joined(separator: " "))]\(marker)")
             // Razer answers every command with a status frame. Without this subscription
             // the reply never surfaces, and an accepted frame looks exactly like a
             // rejected one.
