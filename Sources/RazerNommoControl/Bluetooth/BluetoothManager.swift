@@ -322,6 +322,11 @@ extension BluetoothManager: CBPeripheralDelegate {
     ) {
         if let error {
             append(.error, "Notifications \(short(characteristic.uuid)) : \(error.localizedDescription)")
+        } else {
+            // Logged on success too: without it, an absent reply is indistinguishable
+            // from a subscription that never took effect.
+            let state = characteristic.isNotifying ? "activées" : "désactivées"
+            append(.info, "Notifications \(state) sur \(short(characteristic.uuid))")
         }
     }
 }
