@@ -42,8 +42,10 @@ struct CharacteristicNode: Identifiable {
     /// Razer's own BLE channel spells the ASCII string "-RazerBLE" inside its UUID
     /// (2D 52 61 7A 65 72 42 4C 45), which is what distinguishes it from the unrelated
     /// vendor services the speaker also advertises.
+    static let razerSignature = "2D52-617A-6572-424C45"
+
     var isRazerCommandChannel: Bool {
-        uuidString.uppercased().contains("2D52-617A-6572-424C45")
+        uuidString.uppercased().contains(Self.razerSignature)
     }
 
     var propertyLabels: [String] {

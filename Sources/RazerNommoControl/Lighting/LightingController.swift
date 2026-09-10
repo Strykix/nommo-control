@@ -53,6 +53,9 @@ final class LightingController: ObservableObject {
     @Published var fragmentToMTU = true
     @Published var targetCharacteristicID: String?
 
+    @Published var bleBrightness: Double = 255
+    @Published var setLayout: NommoBLE.SetLayout = .padded
+
     /// Placeholders are substituted before the string is parsed as hex.
     @Published var template = "0F 02 01 05 06 00 00 01 {R} {G} {B}"
 

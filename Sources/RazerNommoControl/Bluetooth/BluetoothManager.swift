@@ -115,6 +115,25 @@ final class BluetoothManager: NSObject, ObservableObject {
         }
     }
 
+    /// Reads every opcode the Nommo exposes, spaced out so the write-without-response
+    /// queue is not overrun. Read-only, so it cannot disturb the speaker's state.
+    /// Individual sends are not logged: each reply carries its own opcode, which is
+    /// what correlates the answer to the question.
+    func probeOpcodes(on node: CharacteristicNode) {
+        guard let peripheral = connectedPeripheral else {
+            append(.error, "Aucun appareil connecté")
+            return
+        }
+        let opcodes = Array(NommoBLE.readableRange)
+        append(.info, "Sondage de \(opcodes.count) opcodes en lecture — chaque réponse porte son opcode")
+        for (index, opcode) in opcodes.enumerated() {
+            DispatchQueue.main.asyncAfter(deadline: .now() + Double(index) * 0.25) { [weak self] in
+                guard let self, self.connectedPeripheral === peripheral else { return }
+                peripheral.writeValue(NommoBLE.get(opcode), for: node.characteristic, type: .withoutResponse)
+            }
+        }
+    }
+
     func read(_ node: CharacteristicNode) {
         guard let peripheral = connectedPeripheral else { return }
         peripheral.readValue(for: node.characteristic)
@@ -303,6 +322,10 @@ extension BluetoothManager: CBPeripheralDelegate {
             services[serviceIndex].characteristics[charIndex].lastValue = value
         }
         append(.rx, "\(short(characteristic.uuid)) → \(Hex.encode(value))")
+        if characteristic.uuid.uuidString.uppercased().contains(CharacteristicNode.razerSignature),
+           let reply = NommoBLE.parse(value) {
+            append(.rx, "   \(reply.description)")
+        }
     }
 
     func peripheral(

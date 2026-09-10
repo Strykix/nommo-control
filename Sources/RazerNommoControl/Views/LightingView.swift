@@ -10,6 +10,8 @@ struct LightingView: View {
                 disclaimer
                 targetSection
                 Divider()
+                nommoSection
+                Divider()
                 encodingSection
                 Divider()
                 effectSection
@@ -22,7 +24,7 @@ struct LightingView: View {
 
     private var disclaimer: some View {
         Label(
-            "Le protocole d'éclairage du Nommo V2 Pro n'est pas documenté. Ces trames sont des hypothèses : si rien ne se passe, utilisez l'explorateur GATT pour trouver la bonne caractéristique.",
+            "L'éclairage du Nommo V2 passe par le canal à opcodes compact, pas par le rapport Razer de 90 octets, que le firmware ignore. La luminosité est la seule commande dont l'effet visuel soit établi ; l'opcode qui porte la couleur reste à trouver.",
             systemImage: "exclamationmark.triangle"
         )
         .font(.caption)
@@ -30,6 +32,38 @@ struct LightingView: View {
         .padding(10)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(Color.orange.opacity(0.12), in: RoundedRectangle(cornerRadius: 8))
+    }
+
+    private var nommoSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("Protocole Nommo BLE").font(.headline)
+            Text("Le format de lecture est confirmé. Le sondage interroge les 128 opcodes en lecture seule : il ne modifie rien et les réponses décodées apparaissent dans le journal.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+
+            HStack(spacing: 12) {
+                Button("Sonder les opcodes") { probeOpcodes() }
+                Button("Lire la luminosité") { sendGet(NommoBLE.brightnessOpcode) }
+            }
+            .disabled(targetNode == nil)
+
+            HStack(spacing: 12) {
+                Text("Luminosité").font(.callout)
+                Slider(value: $lighting.bleBrightness, in: 0...255)
+                Text("\(Int(lighting.bleBrightness))")
+                    .font(.system(.callout, design: .monospaced))
+                    .frame(width: 36, alignment: .trailing)
+                Button("Appliquer") { sendNommoBrightness() }
+                    .disabled(targetNode == nil)
+            }
+
+            Picker("Disposition d'écriture", selection: $lighting.setLayout) {
+                ForEach(NommoBLE.SetLayout.allCases) { layout in
+                    Text(layout.label).tag(layout)
+                }
+            }
+            .pickerStyle(.radioGroup)
+        }
     }
 
     private var targetSection: some View {
@@ -160,6 +194,26 @@ struct LightingView: View {
     private var targetNode: CharacteristicNode? {
         guard let id = lighting.targetCharacteristicID else { return nil }
         return bluetooth.writableCharacteristics.first { $0.id == id }
+    }
+
+    private func probeOpcodes() {
+        guard let node = targetNode else { return }
+        bluetooth.probeOpcodes(on: node)
+    }
+
+    private func sendGet(_ opcode: UInt8) {
+        guard let node = targetNode else { return }
+        bluetooth.write(NommoBLE.get(opcode), to: node, withResponse: false, fragment: false)
+    }
+
+    private func sendNommoBrightness() {
+        guard let node = targetNode else { return }
+        let payload = NommoBLE.set(
+            NommoBLE.brightnessOpcode,
+            value: [UInt8(clamping: Int(lighting.bleBrightness))],
+            layout: lighting.setLayout
+        )
+        bluetooth.write(payload, to: node, withResponse: false, fragment: false)
     }
 
     /// Only fills an empty selection, so a deliberate choice of another channel survives.
